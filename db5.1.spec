@@ -1,6 +1,6 @@
 #
 # Conditional build:
-%bcond_without	java		# don't build java bindings
+%bcond_without	java		# don't build Java bindings
 %bcond_without	tcl		# don't build Tcl bindings
 %bcond_without	static_libs	# don't build static libraries
 
@@ -8,7 +8,7 @@
 
 %define		major		5
 %define		libver		%{major}.1
-%define		ver		%{libver}.25
+%define		ver		%{libver}.29
 %define		patchlevel	0
 Summary:	Berkeley DB database library for C
 Summary(pl.UTF-8):	Biblioteka C do obsługi baz Berkeley DB
@@ -17,10 +17,10 @@ Version:	%{ver}.%{patchlevel}
 Release:	1
 License:	BSD-like (see LICENSE)
 Group:		Libraries
-#Source0Download: http://www.oracle.com/technetwork/database/berkeleydb/downloads/index.html
+#Source0Download: http://www.oracle.com/technetwork/database/berkeleydb/downloads/index-082944.html
 Source0:	http://download.oracle.com/berkeley-db/db-%{ver}.tar.gz
-# Source0-md5:	06656429bfc1abb6c0498eaeff70cd04
-URL:		http://www.oracle.com/technetwork/database/berkeleydb/overview/index.html
+# Source0-md5:	a94ea755ab695bc04f82b94d2e24a1ef
+URL:		http://www.oracle.com/technetwork/database/berkeleydb/downloads/index.html
 BuildRequires:	automake
 %if %{with java}
 BuildRequires:	jdk
@@ -31,8 +31,8 @@ BuildRequires:	rpmbuild(macros) >= 1.426
 BuildRequires:	sed >= 4.0
 %{?with_tcl:BuildRequires:	tcl-devel >= 8.4.0}
 Requires:	uname(release) >= 2.6.0
-Provides:	db = %{libver}
 Provides:	db = %{version}-%{release}
+Provides:	db = %{libver}
 Obsoletes:	db4
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
@@ -162,7 +162,6 @@ Summary(pl.UTF-8):	Biblioteka baz danych Berkeley dla Javy
 Group:		Libraries
 Requires:	jpackage-utils
 Provides:	db-java = %{version}-%{release}
-# db.jar conflicts
 Obsoletes:	db-java
 
 %description java
@@ -326,9 +325,6 @@ poleceń.
 %prep
 %setup -q -n db-%{ver}
 
-# official patches
-#%%patchset_patch 1 %{patchlevel}
-
 %build
 cp -f /usr/share/automake/config.sub dist
 
@@ -345,7 +341,6 @@ CXX="%{__cxx}"
 CFLAGS="%{rpmcflags}"
 CXXFLAGS="%{rpmcflags} -fno-implicit-templates"
 LDFLAGS="%{rpmcflags} %{rpmldflags}"
-
 export CC CXX CFLAGS CXXFLAGS LDFLAGS
 
 ../dist/%configure \
@@ -397,40 +392,45 @@ install -d $RPM_BUILD_ROOT%{_javadir}
 
 %if %{with static_libs}
 %{__make} -C build_unix.static library_install \
-	docdir=%{_docdir}/db-%{version}-docs \
-	DESTDIR=$RPM_BUILD_ROOT
+	DESTDIR=$RPM_BUILD_ROOT \
+	docdir=%{_docdir}/db-%{version}-docs
 %endif
 
 %{__make} -C build_unix library_install \
-	docdir=%{_docdir}/db-%{version}-docs \
 	DESTDIR=$RPM_BUILD_ROOT \
-	LIB_INSTALL_FILE_LIST=""
+	LIB_INSTALL_FILE_LIST="" \
+	docdir=%{_docdir}/db-%{version}-docs
 
 mv $RPM_BUILD_ROOT%{_libdir}/libdb-%{libver}.so $RPM_BUILD_ROOT/%{_lib}
 
 cd $RPM_BUILD_ROOT%{_libdir}
+%if %{with static_libs}
+mv -f libdb.a libdb-%{libver}.a
+mv -f libdb_cxx.a libdb_cxx-%{libver}.a
+%endif
+%if %{with java}
+mv -f $RPM_BUILD_ROOT%{_libdir}/db.jar $RPM_BUILD_ROOT%{_javadir}/db-%{libver}.jar
+%endif
 ln -sf /%{_lib}/libdb-%{libver}.so libdb.so
 ln -sf /%{_lib}/libdb-%{libver}.so libdb-%{libver}.so
 ln -sf /%{_lib}/libdb-%{libver}.so libndbm.so
 ln -sf libdb-%{libver}.la libdb.la
 ln -sf libdb-%{libver}.la libndbm.la
+ln -sf libdb_cxx-%{libver}.so libdb_cxx.so
+ln -sf libdb_cxx-%{libver}.la libdb_cxx.la
 %if %{with java}
 ln -sf libdb_java-%{libver}.la libdb_java.la
-mv -f $RPM_BUILD_ROOT%{_libdir}/*.jar $RPM_BUILD_ROOT%{_javadir}
+ln -sf db-%{libver}.jar $RPM_BUILD_ROOT%{_javadir}/db.jar
 %endif
 %if %{with tcl}
 ln -sf libdb_tcl-%{libver}.so libdb_tcl.so
 ln -sf libdb_tcl-%{libver}.la libdb_tcl.la
 %endif
-ln -sf libdb_cxx-%{libver}.la libdb_cxx.la
 %if %{with static_libs}
-mv -f libdb.a libdb-%{libver}.a
 ln -sf libdb-%{libver}.a libdb.a
 ln -sf libdb-%{libver}.a libndbm.a
-mv -f libdb_cxx.a libdb_cxx-%{libver}.a
 ln -sf libdb_cxx-%{libver}.a libdb_cxx.a
 %endif
-ln -sf libdb_cxx-%{libver}.so libdb_cxx.so
 
 sed -i "s/old_library=''/old_library='libdb-%{libver}.a'/" libdb-%{libver}.la
 sed -i "s/old_library=''/old_library='libdb_cxx-%{libver}.a'/" libdb_cxx-%{libver}.la
@@ -438,9 +438,10 @@ sed -i "s/old_library=''/old_library='libdb_cxx-%{libver}.a'/" libdb_cxx-%{libve
 cd -
 
 cd $RPM_BUILD_ROOT%{_bindir}
-mv dbsql{,-%{libver}}
+mv dbsql dbsql-%{libver}
 for F in db_*; do
-  mv $F $(echo $F|sed 's/db_/db%{libver}_/')
+  Fver=$(echo $F|sed 's/db_/db%{libver}_/')
+  mv $F $Fver
 done
 cd -
 
@@ -487,11 +488,11 @@ rm -rf $RPM_BUILD_ROOT
 %files devel
 %defattr(644,root,root,755)
 %attr(755,root,root) %{_bindir}/db%{libver}_sql_codegen
+%{_libdir}/libdb-%{libver}.la
 %attr(755,root,root) %{_libdir}/libdb-%{libver}.so
 %attr(755,root,root) %{_libdir}/libdb-%{major}.so
 %attr(755,root,root) %{_libdir}/libdb.so
 %attr(755,root,root) %{_libdir}/libndbm.so
-%{_libdir}/libdb-%{libver}.la
 %{_libdir}/libdb.la
 %{_libdir}/libndbm.la
 %{_includedir}/db.h
@@ -526,9 +527,9 @@ rm -rf $RPM_BUILD_ROOT
 
 %files cxx-devel
 %defattr(644,root,root,755)
+%{_libdir}/libdb_cxx-%{libver}.la
 %attr(755,root,root) %{_libdir}/libdb_cxx.so
 %attr(755,root,root) %{_libdir}/libdb_cxx-%{major}.so
-%{_libdir}/libdb_cxx-%{libver}.la
 %{_libdir}/libdb_cxx.la
 %{_includedir}/db_cxx.h
 %{_docdir}/db-%{version}-docs/api_reference/CXX
@@ -550,13 +551,14 @@ rm -rf $RPM_BUILD_ROOT
 %defattr(644,root,root,755)
 %attr(755,root,root) %{_libdir}/libdb_java-%{libver}.so
 %attr(755,root,root) %{_libdir}/libdb_java-%{libver}_g.so
+%{_javadir}/db-%{libver}.jar
 %{_javadir}/db.jar
 
 %files java-devel
 %defattr(644,root,root,755)
+%{_libdir}/libdb_java-%{libver}.la
 %attr(755,root,root) %{_libdir}/libdb_java.so
 %attr(755,root,root) %{_libdir}/libdb_java-%{major}.so
-%{_libdir}/libdb_java-%{libver}.la
 %{_libdir}/libdb_java.la
 %{_docdir}/db-%{version}-docs/collections
 %{_docdir}/db-%{version}-docs/gsg/JAVA
@@ -573,9 +575,9 @@ rm -rf $RPM_BUILD_ROOT
 
 %files tcl-devel
 %defattr(644,root,root,755)
+%{_libdir}/libdb_tcl-%{libver}.la
 %attr(755,root,root) %{_libdir}/libdb_tcl.so
 %attr(755,root,root) %{_libdir}/libdb_tcl-%{major}.so
-%{_libdir}/libdb_tcl-%{libver}.la
 %{_libdir}/libdb_tcl.la
 %{_docdir}/db-%{version}-docs/api_reference/TCL
 %endif
@@ -586,9 +588,9 @@ rm -rf $RPM_BUILD_ROOT
 
 %files sql-devel
 %defattr(644,root,root,755)
+%{_libdir}/libdb_sql-%{libver}.la
 %attr(755,root,root) %{_libdir}/libdb_sql.so
 %attr(755,root,root) %{_libdir}/libdb_sql-%{major}.so
-%{_libdir}/libdb_sql-%{libver}.la
 %{_includedir}/dbsql.h
 %{_docdir}/db-%{version}-docs/bdb-sql
 
@@ -598,9 +600,9 @@ rm -rf $RPM_BUILD_ROOT
 
 %files stl-devel
 %defattr(644,root,root,755)
+%{_libdir}/libdb_stl-%{libver}.la
 %attr(755,root,root) %{_libdir}/libdb_stl.so
 %attr(755,root,root) %{_libdir}/libdb_stl-%{major}.so
-%{_libdir}/libdb_stl-%{libver}.la
 %{_includedir}/dbstl_base_iterator.h
 %{_includedir}/dbstl_common.h
 %{_includedir}/dbstl_container.h
