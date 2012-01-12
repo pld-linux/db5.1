@@ -15,7 +15,7 @@ Summary:	Berkeley DB database library for C
 Summary(pl.UTF-8):	Biblioteka C do obsługi baz Berkeley DB
 Name:		db5.1
 Version:	%{ver}.%{patchlevel}
-Release:	1
+Release:	1.1
 License:	BSD-like (see LICENSE)
 Group:		Libraries
 #Source0Download: http://www.oracle.com/technetwork/database/berkeleydb/downloads/index-082944.html
@@ -62,6 +62,7 @@ Group:		Development/Libraries
 Requires:	%{name} = %{version}-%{release}
 %if %{with default_db}
 Provides:	db-devel = %{version}-%{release}
+Provides:	db-devel = %{version}
 Obsoletes:	db-devel
 Obsoletes:	db3-devel
 Obsoletes:	db4-devel
